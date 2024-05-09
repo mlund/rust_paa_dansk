@@ -1,0 +1,332 @@
+\documentclass{article}
+\usepackage[a6paper, left=1cm, right=1cm, top=1cm, bottom=1.5cm]{geometry}
+\usepackage{xcolor}
+\usepackage[colorlinks]{hyperref}
+\usepackage{svg}
+\usepackage{longtable}
+\usepackage{minted}
+\usemintedstyle{perldoc}
+\newminted{rust}{fontsize=\footnotesize}
+\newmintinline{rust}{}
+\newminted{bash}{fontsize=\footnotesize}
+\renewcommand*\contentsname{Indholdsfortegnelse}
+%\usepackage{graphicx} % Required for inserting images
+
+\author{Mikael Lund}
+\title{EN HÅNDSRÆKNING\\når du programmerer Rust}
+\date{}
+
+\begin{document}
+
+\maketitle
+\begin{center}
+\includesvg[width=0.9\columnwidth]{fig/Original_Ferris.svg}
+\end{center}
+\clearpage
+\newpage
+\tableofcontents
+
+% BOOKLET PRINTING
+%https://ftp.acc.umu.se/mirror/CTAN/graphics/pgf/contrib/pgfmorepages/pgfmorepages.pdf
+
+%----------------------------------------
+
+\newpage
+\section*{Forord}
+\addcontentsline{toc}{section}{Forord}
+
+Den der har haft tysk i folkeskolen vil måske huske et lille orange hæfte med den tillids\-vækkende titel \emph{``En hånds\-rækning når du skriver tysk''}.
+Knud Bjerres oversigt over tysk grammatik har i årtier været en redningsplanke for kommende tysk\-skrivere, og det er derfra inspiration til formatet på dette hæfte er hentet.
+
+Rigtigt meget er skrevet om Rust men, ikke overraskende, ganske lidt på dansk.
+Hæftet indeholder oversættelser af programmeringsbegreber som 
+ mange sikkert vil finde særprægede, da dansk sjældent anvendes i den sammenhæng.
+Hvordan oversættes f.eks. ord som \emph{trait} og \emph{linter}?
+Jeg syntes det ville være ærgerligt at skrinlægge dansk for emnet, og har forsøgt anvende eksisterende oversættelse af f.eks. C og, når det var hensigtsmæssigt, tillagt nytilkomne ord fra Rust.
+Grænserne for \emph{hensigtsmæssig} er naturligvis vide, så på for\-hånd undskyld.
+
+Mål\-gruppen er den lejlig\-heds\-vise Rust-udøver der, ligesom undertegnede, ruster lidt til mellem hver indsats. God fornøjelse!
+
+\vspace{0.5cm}
+M.L, Malmø 2023.
+
+%----------------------------------------
+
+\newpage
+\section*{Pakke- og byggesystemet \rustinline{cargo}}
+\addcontentsline{toc}{section}{Pakkesystemet \rustinline{cargo}}
+Opsættes vha. filen \rustinline{Cargo.toml}, og anvendes til en mængde opgaver:
+
+\begin{bashcode}
+cargo new {--lib}   # skab et nyt projekt
+cargo add <package> # tillæg forudsætning
+cargo build         # kompiler kode
+cargo run           # kompiler og kør kode
+cargo test          # kør test
+cargo clippy        # opdag fnuller
+cargo fmt           # formater kode
+cargo doc           # dokumenter kode
+cargo publish       # offentliggør på crates.io
+
+# kør `examples/sprite.rs` i udgivelsestilstand
+cargo run --release --example sprite
+\end{bashcode}
+
+\noindent Få styr på kompileren\footnote{Rust installeres fra\\
+https://www.rust-lang.org/tools/install}:
+
+\begin{bashcode}
+rustup update               # opdater
+rustup toolchain list       # værktøjsoversigt
+rustup default stable       # anvend stabil rust (anbefalet)
+rustup default nightly      # anvend natlig rust
+rustup override set nightly # køres i projektkatalog
+\end{bashcode}
+
+%----------------------------------------
+%\newpage
+%\section*{Moduler og projektorganisation}
+%\addcontentsline{toc}{subsection}{Moduler og projektorganisation}
+
+
+%----------------------------------------
+\newpage
+\section*{Strukturer}
+\addcontentsline{toc}{section}{Strukturer (\rustinline{struct})}
+
+Om muligt, tilføj (1) typiske \emph{træk} med \rustinline{derive} attributten, og
+(2) tillad evaluering under kompilering vha. \rustinline{const} \rustinline{fn}.
+
+\begin{rustcode}
+/// Navngivet struktur
+#[derive(Debug, Default, Copy, Clone, Eq, PartialEq)]
+struct Position { height: f64 };
+let pos = Position::default(); // nulstillet højde
+
+/// Enheds-lignende struktur (eng.: unit-like)
+struct StayAway;
+
+/// Tuple-lignende struktur
+struct Volume(u8);
+
+impl Volume {
+    /// Tilknyttet funktion (defineret for en type)
+    pub const fn new(volume: u8) -> Self {
+        Self {volume}
+    }
+    /// Tilknyttet metode (kaldet på en type)
+    pub fn mute(&mut self) {
+        self.0 = 0;
+    }
+    /// Tilknyttet konstant
+    const MAX: Volume = Self::new(u8::MAX);
+}
+\end{rustcode}
+
+%----------------------------------------
+\newpage
+\section*{Optællingstyper}
+\addcontentsline{toc}{section}{Optællingstyper (\rustinline{enum})}
+
+Modsat C kan \rustinline{enum} have
+(1) tilknyttede funktioner,
+(2) \emph{varianter} med \emph{data}, samt
+(3) være \emph{generiske}, f.eks. \rustinline{enum} \rustinline{Option<T>}.
+En enhedsenum\footnote{\rustinline{enum} bestående udelukkende af enhedsvarianter (som i C).} kan omtolkes til unik heltals \emph{diskriminant} vha. \rustinline{as}\footnote{Pakken \rustinline{num_enum} tilbyder avancerede konverteringer.}.
+
+\begin{rustcode}
+#[derive(Copy, Clone, Debug, PartialEq)]
+#[repr(u8)] // eksplicit diskriminanttype
+enum Message {
+    Quit = 2, // enhedsvariant; eksplicit diskriminant
+    Position {x: i32, y: i32} = 3, // struct-lignende
+    Color(u8), // tuple variant; implicit diskriminant
+}
+
+let message = Message::Position { x: 200, y: 300 };
+assert_eq!(std::mem::discriminant(&Message::Color(0)),
+           std::mem::discriminant(&Message::Color(1)));
+
+// Mønstergenkendelse
+match message {
+    Message::Quit => format!("quit"),
+    Message::Position(x, y) => format!("pos {} {}", x, y),
+    Message::Color(color) => format!("color {}", color),
+}
+\end{rustcode}
+
+%----------------------------------------
+\newpage
+\subsection*{Eksempler fra standardbiblioteket}
+\addcontentsline{toc}{subsection}{fra standardbiblioteket}
+\rustinline{Option<T>} er en indbygget og meget udbredt optællingstype med to varianter:
+\rustinline{None} og \rustinline{Some(T)}.
+Her nogle eksempler på hvordan denne anvendes til at håndtere evt. manglende data for \rustinline{number: Option<i32>}:
+
+\begin{itemize}
+
+\item
+\begin{rustcode}
+if let Some(n) = number {...} else {...}
+\end{rustcode}
+
+\begin{rustcode}
+match number { // vha. mønstergenkendelse
+    None => { /* håndter manglende data */ }
+    Some(n) => { /* gør noget med n */ }
+}
+\end{rustcode}
+
+\item Tidlig afbrydelse:
+\begin{itemize}
+\item \rustinline{?} operator sender \rustinline{None} til
+kaldende funktion:
+\begin{rustcode}
+fn f(n: i32) -> Option<i32> {
+    Some(n.checked_add(3)?.checked_mul(2)?)
+}
+\end{rustcode}
+
+\item
+\begin{rustcode}
+let Some(n) = number else { panic!(...); }
+// ... gør noget med n
+\end{rustcode}
+\end{itemize}
+
+\item
+\begin{rustcode}
+number.map(i32::abs); // -> None eller Some(|n|)
+\end{rustcode}
+
+\item
+\begin{rustcode}
+number.unwrap_or(12); // -> n eller 12 hvis None    
+\end{rustcode}
+
+\item
+\begin{rustcode}
+let number = Some(12);
+assert!(matches!(number, Some(n) if n > 2));
+\end{rustcode}
+
+\end{itemize}
+
+
+%----------------------------------------
+\newpage
+\section*{Træk}
+\addcontentsline{toc}{section}{Træk (\rustinline{trait})}
+Definer brugergrænseflader vha. \emph{træk}\footnote{Som i \emph{karaktertræk} eller \emph{særtræk}.} eller \rustinline{trait}s:
+
+\begin{rustcode}
+trait Playable {
+    fn new() -> Self;         // tilknyttet funktion
+    fn play(&elf, song: u32); // tilknyttet metode
+    fn play_first(&self) {    // foruddefineret metode
+        self.play(0);         // (kan overskrives)
+    }
+}
+
+struct VinylPlayer;
+impl Playable for VinylPlayer {
+    fn play(&self, song: u32) {}
+    ...
+}
+
+let player: Box<dyn Playable> = Box::new(VinylPlayer::new());
+player.play_first();
+\end{rustcode}
+
+%----------------------------------------
+
+\subsubsection*{Trækafgrænsning (eng:. \emph{trait bound})}
+\addcontentsline{toc}{subsubsection}{trækafgrænsning}
+Begræns træk vha. \emph{trækafgrænsning}
+
+\begin{rustcode}
+fn f1(player: &dyn Playable) {}   // dynamisk
+fn f2<T: Playable>(player: &T) {} // statisk
+fn f3<T>(player: &T)
+where
+    T: Playable + Default,
+{} // statisk; tydeligere ved flere argumenter
+\end{rustcode}
+
+%----------------------------------------
+\subsubsection*{Trækobjekter (eng.: \emph{trait objects})}
+\addcontentsline{toc}{subsubsection}{trækobjekter}
+
+Funktionen \rustinline{fn f1(p: &dyn Playable)} anvender \emph{dynamisk afvikling}\footnote{eng: \emph{dynamic dispatch}} og kan tage imod ethvert objekt hvor \rustinline{Playable} er implementeret. \rustinline{&dyn Playable} er et \emph{trækobjekt} og skabes sådan her:
+\begin{rustcode}
+let player = VinylPlayer as &dyn Playable;
+\end{rustcode}
+
+For at skabe et trækobjekt kræves det at trækket er \emph{objektsikkert} hvilket \underline{blandt andet} forudsætter at\footnote{\url{https://doc.rust-lang.org/reference/items/traits.html\#object-safety}}:
+\begin{itemize}
+    \item trækket ikke har tilknyttede konstanter, ej heller tilknyttede generiske typer.
+    \item trækket ikke har \rustinline{Sized} som supertræk.
+    \item at alle tilknyttede funktioner er \emph{afviklingsbare fra et trækobjekt}, \underline{eller} er eksplicit markerede som ikke-afviklingsbare. Sidstnævnte gøres ved at tillægge
+    trækafgrænsningen \rustinline{where Self: Sized}
+    i definitionen af tilknyttede funktioner.
+\end{itemize}
+
+Følgende træk er objektsikkert, men viste funktioner kan \emph{ikke} afvikles fra et trækobjekt:
+\begin{rustcode}
+trait IkkeAfviklingsbar {
+    fn foo() where Self: Sized {}
+    fn returns(&self) -> Self where Self: Sized
+    fn param(&self, other: Self) where Self: Sized {}
+    fn typed<T>(&self, x: T) where Self: Sized {}
+}
+\end{rustcode}
+
+
+%----------------------------------------
+\newpage
+\subsubsection*{Træk fra standard\-biblioteket}
+\addcontentsline{toc}{subsubsection}{fra standardbiblioteket}
+
+\rustinline{std} og \rustinline{core} tilbyder en række træk som grænse\-flader\-brugere forventer er implementerede.
+Hvis muligt, anvend \rustinline{#[derive(...)]} attributten.
+
+\begin{itemize}
+\begin{scriptsize}
+\item Sammenligning: \rustinline{Eq}, \rustinline{PartialEq}, \rustinline{Ord}, \rustinline{PartialOrd}.
+\item Konvertering: \rustinline{From}, \rustinline{Into}, \rustinline{ToString}.
+\item \rustinline{Clone}, skab ny \rustinline{T} fra \rustinline{&T} vha. kopiering.
+\item \rustinline{Copy}, \emph{kopier} i stedet for at \emph{flytte}.
+\item \rustinline{Default}, definer standardværdi for ny variabel.
+\item \rustinline{Debug} til formattering vha. \rustinline|{:?}|.
+\item \rustinline{Drop} hvis ressourcer manuelt skal frigives når variablen frigives.
+\item \rustinline{Iterator}. Der er enkelt at skrive en iterator, ved bare at definere \rustinline{fn next()}.
+\end{scriptsize}
+\end{itemize}
+
+%----------------------------------------
+\newpage
+\subsection*{Ordbog}
+\addcontentsline{toc}{section}{Ordbog}
+
+\begin{longtable}{l|l}
+\emph{engelsk} & \emph{dansk}\\\hline
+associated function & tilknyttet funktion \\
+attribute & attribut \\
+cast & omtolke \\
+compiler & kompiler \\
+enum & optællingstype \\
+enumeration & enumeration \\
+interface & grænseflade \\
+lint & fnuller \\
+keyword & nøgleord \\
+pointer & peger \\
+trait & træk \\
+trait bound & trækafgrænsning \\
+type declaration & typedeklaration (C) \\
+unit-like enum & enhedsenum \\
+user & bruger \\
+\label{tab:ordbog}
+\end{longtable}
+
+
+\end{document}
